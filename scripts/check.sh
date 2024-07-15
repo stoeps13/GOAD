@@ -7,7 +7,7 @@ ERROR=$(tput setaf 1; echo -n "  [!]"; tput sgr0)
 GOODTOGO=$(tput setaf 2; echo -n "  [✓]"; tput sgr0)
 INFO=$(tput setaf 3; echo -n "  [-]"; tput sgr0)
 
-PROVIDERS="virtualbox vmware azure proxmox"
+PROVIDERS="virtualbox vmware azure proxmox libvirt"
 ANSIBLE_HOSTS="docker local"
 print_usage() {
   echo "Usage: ./check.sh <provider> <ansible_host>"
@@ -45,7 +45,7 @@ check_vagrant_path() {
     # If the version of Vagrant is not greater or equal to the required version
     if ! [ "$(printf '%s\n' "$REQUIRED_VERSION" "$VAGRANT_VERSION" | sort -V | head -n1)" = "$REQUIRED_VERSION" ]; then
         (echo >&2 "${ERROR} WARNING: It is highly recommended to use Vagrant $REQUIRED_VERSION or above before continuing")
-    else 
+    else
         (echo >&2 "${GOODTOGO} Your version of Vagrant ($VAGRANT_VERSION) is supported")
     fi
   fi
@@ -93,6 +93,17 @@ check_virtualbox_installed() {
     exit 1
   else
     (echo >&2 "${GOODTOGO} virtualbox is installed")
+  fi
+}
+
+check_libvirt_installed() {
+  if ! which virsh >/dev/null; then
+    (echo >&2 "${ERROR} virsh was not found in your PATH.")
+    (echo >&2 "${ERROR} Please correct this before continuing. Exiting.")
+    (echo >&2 "${ERROR} Correct this by installing virtualbox")
+    exit 1
+  else
+    (echo >&2 "${GOODTOGO} libvirt is installed")
   fi
 }
 
@@ -335,9 +346,9 @@ check_vagrant_instances_exist() {
   if [ "$VAGRANT_BUILT" -ne 4 ]; then
     (echo >&2 "${INFO} You appear to have already created at least one Vagrant instance:")
     # shellcheck disable=SC2164
-    cd "$VAGRANT_DIR" && echo "$VAGRANT_STATUS_OUTPUT" | grep -v 'not created' | grep -E 'logger|dc|wef|win10' 
+    cd "$VAGRANT_DIR" && echo "$VAGRANT_STATUS_OUTPUT" | grep -v 'not created' | grep -E 'logger|dc|wef|win10'
     (echo >&2 "${INFO} If you want to start with a fresh install, you should run \`vagrant destroy -f\` to remove existing instances.")
-  else 
+  else
     (echo >&2 "${GOODTOGO} No Vagrant instances have been created yet")
   fi
 }
@@ -350,7 +361,7 @@ check_vagrant_reload_plugin() {
     if ! $(which vagrant) plugin install "vagrant-reload"; then
       (echo >&2 "Unable to install the vagrant-reload plugin. Please try to do so manually and re-run this script.")
       exit 1
-    else 
+    else
       (echo >&2 "${GOODTOGO} The vagrant-reload plugin was successfully installed!")
     fi
   else
@@ -386,6 +397,24 @@ main() {
     "virtualbox")
       (echo >&2 "[+] Enumerating virtulabox")
       check_virtualbox_installed
+      check_vagrant_path
+      check_vagrant_reload_plugin
+      check_disk_free_space
+      check_ram_space
+      case $ANSIBLE_HOST in
+        "docker")
+          check_docker_installed
+          ;;
+        "local")
+          check_python_env
+          ;;
+        *)
+          ;;
+      esac
+      ;;
+    "libvirt")
+      (echo >&2 "[+] Enumerating libvirt")
+      check_libvirt_installed
       check_vagrant_path
       check_vagrant_reload_plugin
       check_disk_free_space
@@ -448,5 +477,5 @@ main() {
   esac
 }
 
-main 
+main
 exit 0

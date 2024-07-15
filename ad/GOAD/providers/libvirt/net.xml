@@ -1,0 +1,6 @@
+<network>
+  <name>ad_network</name>
+  <bridge name="virbr100" />
+  <forward mode="route" />
+  <ip address="10.0.23.1" netmask="255.255.255.0" />
+</network>
