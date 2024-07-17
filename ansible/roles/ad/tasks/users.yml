@@ -4,19 +4,20 @@
     dest: C:\windows\temp
 
 - name: "Create users"
-  win_domain_user:
+  microsoft.ad.user:
     name: "{{ item.key }}"
     firstname: "{{item.value.firstname}}"
     surname: "{{ item.value.surname | default(item.value.firstname) }}"
     password: "{{ item.value.password }}"
     password_never_expires: yes
     state: present
-    path: "{{item.value.path}}"
-    description: "{{item.value.description | default('-')}}"
-    groups: "{{ item.value.groups}}"
-    city: "{{item.value.city | default('-')}}"
-    domain_username: "{{domain_username}}"
-    domain_password: "{{domain_password}}"
+    path: "{{ item.value.path }}"
+    description: "{{ item.value.description | default('-') }}"
+    groups:
+      set: "{{ item.value.groups }}"
+    city: "{{ item.value.city | default('-') }}"
+    domain_username: "{{ domain_username }}"
+    domain_password: "{{ domain_password }}"
   with_dict: "{{ ad_users }}"
   register: usercreate
   until: "usercreate is not failed"
@@ -24,9 +25,10 @@
   delay: 30
 
 - name: "Set users SPN lists"
-  win_domain_user:
+  microsoft.ad.user:
     name: "{{ item.key }}"
-    spn: "{{item.value.spns}}"
+    spn:
+      set: "{{item.value.spns}}"
     domain_username: "{{domain_username}}"
     domain_password: "{{domain_password}}"
   with_dict: "{{ ad_users }}"

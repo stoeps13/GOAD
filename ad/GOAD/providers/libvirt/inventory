@@ -25,13 +25,14 @@ elk ansible_host=10.0.22.50 ansible_connection=ssh
 ; domain_name : folder inside ad/
 domain_name=GOAD
 
-force_dns_server=no
-dns_server=x.x.x.x
+force_dns_server=yes
+dns_server=10.0.22.2
 two_adapters=yes
+default_gateway=10.0.22.1
 
 ; adapter created by vagrant and virtualbox
-nat_adapter=Ethernet
-domain_adapter=Ethernet 2
+domain_adapter='Ethernet Instance 0'
+nat_adapter='Ethernet Instance 0 2'
 
 ; winrm connection (windows)
 ansible_user=vagrant

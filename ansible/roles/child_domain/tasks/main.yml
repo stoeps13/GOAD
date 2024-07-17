@@ -1,10 +1,10 @@
-- name: "disable the registration of the {{nat_adapter}} interface (NAT address) in DNS"
-  ansible.windows.win_shell: Get-NetAdapter {{nat_adapter}} | Set-DNSClient -RegisterThisConnectionsAddress $False
+- name: "disable the registration of the {{ nat_adapter }} interface (NAT address) in DNS"
+  ansible.windows.win_shell: Get-NetAdapter '{{nat_adapter}}' | Set-DNSClient -RegisterThisConnectionsAddress $False
   when: two_adapters == "yes"
 
-- name: "Set configure dns to {{dns_domain}}"
+- name: "Set configure dns to {{ dns_domain }}"
   win_dns_client:
-    adapter_names: "{{domain_adapter}}"
+    adapter_names: "{{ domain_adapter }}"
     ipv4_addresses:
       - "{{hostvars[dns_domain].ansible_host}}"
     log_path: C:\dns_log.txt
@@ -23,66 +23,85 @@
     include_management_tools: yes
   register: features
 
+- name: Install windows features - DNS
+  win_feature:
+    name: DNS
+    state: present
+    include_management_tools: yes
+  register: features
+
 # DNSCHANGE
 # - name: "disable interface {{nat_adapter}} before join domain"
 #   win_shell: netsh interface set interface "{{nat_adapter}}" disable
 
-- name: add child domain to parent domain
-  ansible.windows.win_powershell:
-    script: |
-      [CmdletBinding()]
-      param (
-          [String]
-          $Password,
+- name: Set DNS from parent domain
+  win_dns_client:
+    adapter_names: "{{ nat_adapter }}"
+    ipv4_addresses: 10.0.22.10
 
-          [String]
-          $DomainAdmin,
-
-          [String]
-          $ParentDomainName,
-
-          [String]
-          $NewDomainNetbiosName,
-
-          [String]
-          $ReplicationSourceDC,
-
-          [String]
-          $NewDomainName,
-
-          [String]
-          $DomSafePassword
-      )
-      try {
-          $child_domain = Get-ADDomain -Identity $NewDomainName
-          $domainExist=$true
-      } catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
-          $domainExist=$false
-      }
-      if (-not $domainExist) {
-        $Ansible.Changed = $true
-        $pass = ConvertTo-SecureString $Password -AsPlainText -Force
-        $Cred = New-Object System.Management.Automation.PSCredential ($DomainAdmin, $pass)
-        $safePassword = ConvertTo-SecureString $DomSafePassword -AsPlainText -Force
-        Install-ADDSDomain -Credential $Cred -SkipPreChecks -NewDomainName $NewDomainName -NewDomainNetbiosName $NewDomainNetbiosName -ParentDomainName $ParentDomainName -ReplicationSourceDC $ReplicationSourceDC -DatabasePath "C:\Windows\NTDS" -SYSVOLPath "C:\Windows\SYSVOL" -LogPath "C:\Windows\Logs" -SafeModeAdministratorPassword $safePassword -Force -NoRebootOnCompletion
-      } else {
-        $Ansible.Changed = $false
-      }
-    parameters:
-      Password: "{{parent_domain_password}}"
-      DomSafePassword: "{{domain_password}}"
-      DomainAdmin: "Administrator@{{parent_domain}}"
-      ParentDomainName: "{{parent_domain}}"
-      ReplicationSourceDC: "{{source_dc}}"
-      NewDomainNetbiosName: "{{netbios_name}}"
-      NewDomainName: "{{domain.split('.')[0]}}"
-  register: child_result
-
-- name: Reboot
-  win_reboot:
-    reboot_timeout: 900
-    post_reboot_delay: 100
-  when: child_result.changed
+- name: "Create a child domain {{ domain }} with parent {{ parent_domain }}"
+  microsoft.ad.domain_child:
+    dns_domain_name: "{{ domain }}"
+    domain_admin_user: "Administrator@{{ parent_domain }}"
+    domain_admin_password: "{{ parent_domain_password }}"
+    safe_mode_password: "{{ domain_password }}"
+    reboot: true
+#- name: add child domain to parent domain
+#  ansible.windows.win_powershell:
+#    script: |
+#      [CmdletBinding()]
+#      param (
+#          [String]
+#          $Password,
+#
+#          [String]
+#          $DomainAdmin,
+#
+#          [String]
+#          $ParentDomainName,
+#
+#          [String]
+#          $NewDomainNetbiosName,
+#
+#          [String]
+#          $ReplicationSourceDC,
+#
+#          [String]
+#          $NewDomainName,
+#
+#          [String]
+#          $DomSafePassword
+#      )
+#      try {
+#          $child_domain = Get-ADDomain -Identity $NewDomainName
+#          $domainExist=$true
+#      } catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
+#          $domainExist=$false
+#      }
+#      if (-not $domainExist) {
+#        $Ansible.Changed = $true
+#        $pass = ConvertTo-SecureString $Password -AsPlainText -Force
+#        $Cred = New-Object System.Management.Automation.PSCredential ($DomainAdmin, $pass)
+#        $safePassword = ConvertTo-SecureString $DomSafePassword -AsPlainText -Force
+#        Install-ADDSDomain -Credential $Cred -SkipPreChecks -NewDomainName $NewDomainName -NewDomainNetbiosName $NewDomainNetbiosName -ParentDomainName $ParentDomainName -ReplicationSourceDC $ReplicationSourceDC -DatabasePath "C:\Windows\NTDS" -SYSVOLPath "C:\Windows\SYSVOL" -LogPath "C:\Windows\Logs" -SafeModeAdministratorPassword $safePassword -Force -NoRebootOnCompletion
+#      } else {
+#        $Ansible.Changed = $false
+#      }
+#    parameters:
+#      Password: "{{parent_domain_password}}"
+#      DomSafePassword: "{{domain_password}}"
+#      DomainAdmin: "Administrator@{{parent_domain}}"
+#      ParentDomainName: "{{parent_domain}}"
+#      ReplicationSourceDC: "{{source_dc}}"
+#      NewDomainNetbiosName: "{{netbios_name}}"
+#      NewDomainName: "{{domain.split('.')[0]}}"
+#  register: child_result
+#
+#- name: Reboot
+#  win_reboot:
+#    reboot_timeout: 900
+#    post_reboot_delay: 100
+#  when: child_result.changed
 
 # - name: "enable interface {{nat_adapter}} after domain joined"
 #   win_shell: netsh interface set interface "{{nat_adapter}}" enable
@@ -95,10 +114,26 @@
   ansible.windows.win_shell: dnscmd . /resetlistenaddresses {{ hostvars[dict_key].ansible_host }}
   when: two_adapters == "yes"
 
-- name: "Install XactiveDirectory"
-  win_psmodule:
-    name: ActiveDirectoryDSC
-    state: present
+#- name: "Install XactiveDirectory"
+#  community.windows.win_psmodule:
+#    name: ActiveDirectoryDsc
+#    state: present
+
+- block:
+    - name: ensure required powershell module is present
+      community.windows.win_psmodule:
+        name: ActiveDirectoryDsc
+        state: present
+  rescue:
+    - name: install latest version of PowershellGet
+      ansible.windows.win_shell: |
+        $ErrorActionPreference = 'Stop'
+        Install-Module -Name 'PowerShellGet' -Repository 'PSGallery' -Scope 'AllUsers' -AllowClobber -Force -Confirm:$false
+
+    - name: ensure required powershell module is present (retry)
+      community.windows.win_psmodule:
+        name: ActiveDirectoryDsc
+        state: present
 
 # issue 156
 - name: enable the Active directory web services if not enabled

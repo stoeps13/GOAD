@@ -1,10 +1,22 @@
 - name: "Force a DNS on the adapter {{nat_adapter}}"
   ansible.windows.win_dns_client:
     adapter_names: "{{nat_adapter}}"
-    dns_servers: 
-      - "{{dns_server}}"
+    dns_servers:
       - "{{hostvars[dns_domain].ansible_host}}"
+      - "{{dns_server}}"
   when: force_dns_server == "yes"
+
+# - name: Get ip on nat_adapter
+#   win_shell: "Get-NetIpAddress -InterfaceAlias '{{ nat_adapter }}'"
+#   register: ip_address_output
+#
+- name: Set default gateway on nat_adapter
+  win_shell: |
+    get-netipaddress | Where-Object { $_.IPAddress -like '10.0.22.*' } | foreach-object {
+    $ipAddress = $_.IPAddress
+    $interfaceAlias = $_.InterfaceAlias
+    new-NetIPAddress -InterfaceAlias $interfaceAlias -IPAddress $ipAddress -DefaultGateway "10.0.22.1" -PrefixLength 24
+    }
 
 - name: Set a proxy for specific protocols
   community.windows.win_http_proxy:
